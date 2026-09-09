@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package cevell.wire.v1;
+
+option go_package = "github.com/cevell/private-ai/pkg/proto/v1;wirev1";
+
+// CipherSuite specifies the cryptographic algorithm suite used for envelope encryption.
+enum CipherSuite {
+  CIPHER_SUITE_UNSPECIFIED = 0;
+  // RFC 9180: DHKEM(X25519, HKDF-SHA256) + HKDF-SHA256 + AES-256-GCM
+  CIPHER_SUITE_DHKEM_X25519_AES256_GCM = 1;
+  // RFC 9180: DHKEM(X25519, HKDF-SHA256) + HKDF-SHA256 + ChaCha20Poly1305
+  CIPHER_SUITE_DHKEM_X25519_CHACHA20_POLY1305 = 2;
+}
+
+// CompressionCodec defines optional compression applied to plaintext prior to encryption.
+enum CompressionCodec {
+  COMPRESSION_NONE = 0;
+  COMPRESSION_ZSTD = 1;
+  COMPRESSION_SNAPPY = 2;
+}
+
+// FrameType identifies the semantic payload carried inside a StreamingInferenceFrame.
+enum FrameType {
+  FRAME_TYPE_UNSPECIFIED = 0;
+  // Streaming token chunk (AES-GCM encrypted delta token or SSE event)
+  FRAME_TYPE_TOKEN_DELTA = 1;
+  // Non-streaming full completion payload
+  FRAME_TYPE_COMPLETION = 2;
+  // Stream termination signal (equivalent to [DONE])
+  FRAME_TYPE_STREAM_END = 3;
+  // Enclave error frame (encrypted error message)
+  FRAME_TYPE_ERROR = 4;
+  // Heartbeat / keepalive frame to prevent proxy timeouts during prefill
+  FRAME_TYPE_HEARTBEAT = 5;
+}
+
+// EncryptedInferenceRequest is the outer wire envelope sent by the client to POST /v1/chat/completions.
+message EncryptedInferenceRequest {
+  // Protocol wire version (must be 1 for v1)
+  uint32 version = 1;
+
+  // Cryptographic ciphersuite used for HPKE encryption
+  CipherSuite cipher_suite = 2;
+
+  // 32-byte client ephemeral X25519 public key (DHKEM sender public key)
+  bytes client_ephemeral_public_key = 3;
+
+  // 12-byte initialization vector / nonce for request AEAD decryption
+  bytes nonce = 4;
+
+  // Encrypted ciphertext containing the OpenAI-compatible JSON request payload (and AEAD tag)
+  bytes encrypted_payload = 5;
+
+  // Optional: 32-byte SHA-256 digest of the CVM's attestation document or TLS fingerprint.
+  // Pins the request cryptographically to an attested instance, preventing replay/relay attacks.
+  bytes attestation_binding_hash = 6;
+
+  // Client-generated unique correlation ID for tracking and idempotency
+  string request_id = 7;
+
+  // Compression codec applied to plaintext before AEAD encryption
+  CompressionCodec compression = 8;
+
+  // Reserved for Ox ecosystem control flags (e.g. ox-fleet failover hints, ox-shield routing)
+  map<string, string> ecosystem_metadata = 9;
+}
+
+// StreamingInferenceFrame is a framed binary AEAD message emitted over HTTP chunked streaming.
+message StreamingInferenceFrame {
+  // Monotonically increasing sequence number (0, 1, 2, ...)
+  // Prevents frame replay, undetected drops, and guarantees ordered assembly.
+  uint32 sequence_number = 1;
+
+  // Semantic type of the frame
+  FrameType frame_type = 2;
+
+  // AES-256-GCM encrypted payload (delta token JSON, completion JSON, or error)
+  bytes encrypted_payload = 3;
+
+  // 16-byte AES-GCM authentication tag for this frame
+  bytes auth_tag = 4;
+
+  // Generation timestamp at enclave exit (Unix nanoseconds) for latency and audit telemetry
+  int64 timestamp_ns = 5;
+}

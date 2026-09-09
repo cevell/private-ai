@@ -1,0 +1,18 @@
+--index-url https://download.pytorch.org/whl/cu124
+--extra-index-url https://pypi.org/simple
+
+# Explicit GPU-Locked PyTorch CUDA 12.4 Stack
+torch==2.5.1+cu124
+torchvision==0.20.1+cu124
+torchaudio==2.5.1+cu124
+triton==3.1.0
+vllm==0.7.3
+xformers==0.0.28.post3
+cupy-cuda12x==13.6.0
+
+# Acceleration & Fast Model Transfer
+hf_transfer==0.1.9
+huggingface_hub==0.36.2
+transformers==4.48.2
+fastapi==0.133.1
+uvicorn==0.41.0

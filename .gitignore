@@ -1,0 +1,20 @@
+# Build & Disk Image Artifacts
+result/
+result-*/
+*.raw
+*.roothash
+*.vmlinuz
+*.initrd
+*.efi
+
+# Binary & Boot Assets
+boot-efi/
+
+# Temporary & Cache Files
+temp_gcp_deploy/
+__pycache__/
+*.pyc
+*.tmp
+.DS_Store
+result*
+deploy_state.json
