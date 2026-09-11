@@ -4,7 +4,7 @@ This document contains licensing notices, attributions, and disclaimers for thir
 software components included in the Cevell Confidential VM appliance and disk images.
 
 The Cevell platform supervisor (cevell-node), orchestration engine (ox), and first-party 
-control logic are governed by the primary LICENSE file (PolyForm Noncommercial License 1.0.0). 
+control logic are governed by the primary LICENSE file (PolyForm Shield License 1.0.0). 
 
 The third-party components listed below are distributed alongside Cevell as a software 
 aggregate under their respective upstream open-source licenses and vendor agreements.

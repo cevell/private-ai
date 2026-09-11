@@ -2,43 +2,44 @@ Cevell Platform Licensing Overview
 
 The Cevell Confidential Computing platform is organized into two distinct licensing tiers:
 
-- Core First-Party Platform Software: Governs Cevell software (including `cevell-node`, `cevell-initrd`, orchestration scripts, and build expressions) under the PolyForm Noncommercial License 1.0.0 set forth below, accompanied by the explicit non-commercial scope clarifications.
+- Core First-Party Platform Software: Governs Cevell software (including `cevell-node`, `cevell-initrd`, orchestration scripts, and build expressions) under the PolyForm Shield License 1.0.0 set forth below, accompanied by the explicit scope clarifications.
 - Third-Party Components: Upstream software packages and modules bundled or aggregated within the bootable CVM disk images (e.g., Linux kernel, NVIDIA open kernel modules, Busybox, Go standard runtime) are governed by their respective upstream licenses detailed in THIRD_PARTY_LICENSES.md.
 
 ================================================================================
 EXPLICIT PERMITTED & PROHIBITED USE SPECIFICATION
 ================================================================================
 
-This specification outlines the permitted and prohibited uses under the PolyForm Noncommercial License 1.0.0 for all first-party Cevell software:
+This specification outlines the permitted and prohibited uses under the PolyForm Shield License 1.0.0 for all first-party Cevell software:
 
-1. PERMITTED USES (Strictly Non-Commercial):
+1. PERMITTED USES (Internal Commercial Self-Hosting & Evaluation Allowed):
+   - Internal Commercial & Business Operations: Deploying, configuring, and running self-hosted instances on private hardware, on-premises data centers, or private cloud environments for internal operations, proprietary applications, and confidential data processing, provided that the deployment is NOT offered as a competing product or service to third parties.
    - Academic & Personal Research: Using, studying, and modifying the software for academic research, personal curiosity, algorithmic experimentation, and public knowledge sharing.
-   - Experiments & Benchmarking: Benchmarking throughput, latency, cryptographic overhead, and hardware enclave performance in non-commercial test environments.
-   - Self-Hosting (Non-Commercial): Deploying and running self-hosted instances on personal hardware, homelabs, or non-commercial cloud environments, provided that NO paid services, commercial APIs, fees, or commercial activities are conducted using the deployment.
+   - Experiments & Benchmarking: Benchmarking throughput, latency, cryptographic overhead, and hardware enclave performance in non-competing test environments.
    - Security Audits & Vulnerability Research: Conducting source code audits, formal verification, fuzz testing, static/dynamic security analysis, and penetration testing.
    - Cryptographic & Silicon Attestation Verification: Inspecting and compiling the source code to independently audit and reproduce binary hashes (dm-verity root hashes, UKI PCR values, MRTD/RTMR measurements) to verify genuine hardware silicon attestation reports (Intel TDX, AMD SEV-SNP, NVIDIA Confidential Computing).
-   - Non-Commercial Organizations: Deployment and use by registered charities, educational institutions, public research laboratories, public health/safety entities, environmental protection organizations, and government agencies, regardless of funding sources.
+   - Non-Commercial & Educational Organizations: Deployment and use by registered charities, educational institutions, public research laboratories, public health/safety entities, and government agencies.
 
-2. PROHIBITED USES (Commercial Usage Strictly Prohibited):
-   - Commercial Production & Operations: Any use by a commercial entity, corporation, or sole proprietorship for commercial operations, business processes, or revenue-generating activities.
-   - Hosted Services & Cloud Platforms: Providing the software or its capabilities as a hosted service, managed service, cloud platform, compute-as-a-service, or software-as-a-service (SaaS) to third parties for commercial gain or as part of a commercial product.
-   - Commercial Distribution & Bundling: Selling, sublicensing, leasing, renting, or embedding the software into commercial proprietary products, hardware appliances, or commercial distributions.
-   - Commercial Inquiries: Any commercial deployment, hosted service, or enterprise use requires a separate commercial license agreement from Cevell. For commercial inquiries, please contact: contact@mail.cevell.com or visit https://cevell.com.
+2. PROHIBITED USES (Competing Products & Commercial Arbitrage Strictly Prohibited):
+   - Hosted Services & Cloud Platforms: Providing the software, its runtime, or its functionality as a hosted service, managed service, cloud platform, compute-as-a-service, or API platform to third parties that competes with Cevell or cevell.com.
+   - Commercial Arbitrage & Reselling: Selling, sublicensing, leasing, renting, or reselling access to the software or derived images, or offering turnkey confidential VM deployments as a paid infrastructure service to third parties.
+   - Competing Products & Substitutes: Developing, distributing, or marketing any product or service that serves as a practical commercial substitute for the Cevell platform or services offered by Cevell.
+   - Commercial Inquiries: Any use to provide hosted services, managed cloud infrastructure, or competing commercial offerings requires a separate commercial partnership agreement from Cevell. For commercial inquiries, please contact: contact@mail.cevell.com or visit https://cevell.com.
 
 3. DISTRIBUTION CONDITIONS & OBLIGATIONS:
-   - Preservation of Notices: Any distribution of the software, whether modified or unmodified, must include this complete LICENSE file, a reference to https://polyformproject.org/licenses/noncommercial/1.0.0, and the Required Notice specified below.
-   - Reciprocal Non-Commercial Scope: Any derivative works or changes must be distributed strictly under the same PolyForm Noncommercial License 1.0.0 terms. You may not impose additional restrictions or sublicense the software under different terms.
+   - Preservation of Notices: Any distribution of the software, whether modified or unmodified, must include this complete LICENSE file, a reference to https://polyformproject.org/licenses/shield/1.0.0, and the Required Notice specified below.
+   - Reciprocal Shield Scope: Any derivative works or changes must be distributed strictly under the same PolyForm Shield License 1.0.0 terms. You may not impose additional restrictions or sublicense the software under different terms.
    - Free of Licensing Fees: You may not charge licensing fees, royalty fees, or access fees for the software or its derivatives.
    - Patent Defense: Any legal action asserting patent infringement against the licensor regarding this software immediately revokes all patent licenses granted hereunder.
    - Cure Period: Unintentional non-compliance can be cured within 32 days of receipt of written notice, after which licenses permanently terminate if not remedied.
 
 ================================================================================
-POLYFORM NONCOMMERCIAL LICENSE 1.0.0
+POLYFORM SHIELD LICENSE 1.0.0
 ================================================================================
 
 Required Notice: Copyright Cevell (contact@mail.cevell.com)
+Licensor Line of Business: Cevell Confidential AI Platform & Managed Infrastructure (https://cevell.com)
 
-https://polyformproject.org/licenses/noncommercial/1.0.0
+https://polyformproject.org/licenses/shield/1.0.0
 
 ## Acceptance
 
@@ -46,15 +47,15 @@ In order to get any license under these terms, you must agree to them as both st
 
 ## Copyright License
 
-The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose. However, you may only distribute the software according to [Distribution License](#distribution-license) and make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license).
+The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose.  However, you may only distribute the software according to [Distribution License](#distribution-license) and make changes or new works based on the software according to [Changes and New Works License](#changes-and-new-works-license).
 
 ## Distribution License
 
-The licensor grants you an additional copyright license to distribute copies of the software. Your license to distribute covers distributing the software with changes and new works permitted by [Changes and New Works License](#changes-and-new-works-license).
+The licensor grants you an additional copyright license to distribute copies of the software.  Your license to distribute covers distributing the software with changes and new works permitted by [Changes and New Works License](#changes-and-new-works-license).
 
 ## Notices
 
-You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software. For example:
+You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with the software.  For example:
 
 > Required Notice: Copyright Cevell (contact@mail.cevell.com)
 
@@ -66,17 +67,27 @@ The licensor grants you an additional copyright license to make changes and new 
 
 The licensor grants you a patent license for the software that covers patent claims the licensor can license, or becomes able to license, that you would infringe by using the software.
 
-## Noncommercial Purposes
+## Noncompete
 
-Any noncommercial purpose is a permitted purpose.
+Any purpose is a permitted purpose, except for providing any product that competes with the software or any product the licensor or any of its affiliates provides using the software.
 
-## Personal Uses
+## Competition
 
-Personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, amateur pursuits, or religious observance, without any anticipated commercial application, is use for a permitted purpose.
+Goods and services compete even when they provide functionality through different kinds of interfaces or for different technical platforms.  Applications can compete with services, libraries with plugins, frameworks with development tools, and so on, even if they're written in different programming languages or for different computer architectures.  Goods and services compete even when provided free of charge.  If you market a product as a practical substitute for the software or another product, it definitely competes.
 
-## Noncommercial Organizations
+## New Products
 
-Use by any charitable organization, educational institution, public research organization, public safety or health organization, environmental protection organization, or government institution is use for a permitted purpose regardless of the source of funding or obligations resulting from the funding.
+If you are using the software to provide a product that does not compete, but the licensor or any of its affiliates brings your product into competition by providing a new version of the software or another product using the software, you may continue using versions of the software available under these terms beforehand to provide your competing product, but not any later versions.
+
+## Discontinued Products
+
+You may begin using the software to compete with a product or service that the licensor or any of its affiliates has stopped providing, unless the licensor includes a plain-text line beginning with `Licensor Line of Business:` with the software that mentions that line of business.  For example:
+
+> Licensor Line of Business: Cevell Confidential AI Platform & Managed Infrastructure (https://cevell.com)
+
+## Sales of Business
+
+If the licensor or any of its affiliates sells a line of business developing the software or using the software to provide a product, the buyer can also enforce [Noncompete](#noncompete) for that product.
 
 ## Fair Use
 
@@ -84,7 +95,7 @@ You may have "fair use" rights for the software under the law. These terms do no
 
 ## No Other Rights
 
-These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else. These terms do not imply any other licenses.
+These terms do not allow you to sublicense or transfer any of your licenses to anyone else, or prevent the licensor from granting licenses to anyone else.  These terms do not imply any other licenses.
 
 ## Patent Defense
 
@@ -92,7 +103,7 @@ If you make any written claim that the software infringes or contributes to infr
 
 ## Violations
 
-The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice. Otherwise, all your licenses end immediately.
+The first time you are notified in writing that you have violated any of these terms, or done anything with the software not covered by your licenses, your licenses can nonetheless continue if you come into full compliance with these terms, and take practical steps to correct past violations, within 32 days of receiving notice.  Otherwise, all your licenses end immediately.
 
 ## No Liability
 
@@ -102,9 +113,15 @@ The first time you are notified in writing that you have violated any of these t
 
 The **licensor** is the individual or entity offering these terms, and the **software** is the software the licensor makes available under these terms.
 
+A **product** can be a good or service, or a combination of them.
+
 **You** refers to the individual or entity agreeing to these terms.
 
-**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all organizations that have control over, are under the control of, or are under common control with that organization. **Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise. Control can be direct or indirect.
+**Your company** is any legal entity, sole proprietorship, or other kind of organization that you work for, plus all its affiliates.
+
+**Affiliates** means the other organizations than an organization has control over, is under the control of, or is under common control with.
+
+**Control** means ownership of substantially all the assets of an entity, or the power to direct its management and policies by vote, contract, or otherwise.  Control can be direct or indirect.
 
 **Your licenses** are all the licenses granted to you for the software under these terms.
 
