@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "cevell-boot-provenance",
+  "version": "1.0.0",
+  "timestamp": "2026-08-29T12:00:00Z",
+  "upstream_distro": "Ubuntu 24.04 LTS (Noble Numbat)",
+  "kernel_flavor": "linux-aws",
+  "kernel_version": "7.0.0-1006-aws",
+  "artifacts": [
+    {
+      "path": "boot-efi/vmlinuz-aws",
+      "type": "kernel",
+      "sha256": "48ac46ad48a61adf89e12fbdf68ca75d6a165174e78405731a77652f20a73429",
+      "size_bytes": 17230216,
+      "upstream_package": "linux-image-7.0.0-1006-aws",
+      "signature_type": "UEFI SecureBoot PKCS#7 (Canonical Ltd.)"
+    },
+    {
+      "path": "boot-efi/ubuntu/shimx64.efi",
+      "type": "uefi_shim",
+      "sha256": "4c89145e958cf592a6f16552eadf112ef2c1c525e2435c2761e6a99fa88188b3",
+      "size_bytes": 966768,
+      "upstream_package": "shim-signed",
+      "signature_type": "Microsoft UEFI CA (Third-Party Marketplace)"
+    },
+    {
+      "path": "boot-efi/ubuntu/grubx64.efi",
+      "type": "uefi_bootloader",
+      "sha256": "33e1d46cb68e41a293c767750078bbdb857ad7c1197a2206dea737bc9ccb8dbf",
+      "size_bytes": 2828168,
+      "upstream_package": "grub-efi-amd64-signed",
+      "signature_type": "Canonical Ltd. Master Certificate Authority"
+    },
+    {
+      "path": "boot-efi/ubuntu/mmx64.efi",
+      "type": "uefi_mokmanager",
+      "sha256": "5f9fc41db3dfe3b581fc20cae696af82c5ca21e96071ec9c4c28ee4a15f989d8",
+      "size_bytes": 856280,
+      "upstream_package": "shim-signed",
+      "signature_type": "Canonical Ltd. Master Certificate Authority"
+    },
+    {
+      "path": "boot-efi/initrd-modules/01-dm-bufio.ko",
+      "type": "kernel_module",
+      "sha256": "6e78a0a831c5f4afa3d3420b9f2c85f4d7e8d89cfc99c14a91643a4446209f94",
+      "upstream_package": "linux-modules-7.0.0-1006-aws",
+      "signature_type": "In-Kernel PKCS#7 Module Signature (Module.sig)"
+    },
+    {
+      "path": "boot-efi/initrd-modules/02-dm-verity.ko",
+      "type": "kernel_module",
+      "sha256": "b7a766bf74622d0cd90f99d9696086f3d1bb9a760d02c42948ec534744bfc47b",
+      "upstream_package": "linux-modules-7.0.0-1006-aws",
+      "signature_type": "In-Kernel PKCS#7 Module Signature (Module.sig)"
+    },
+    {
+      "path": "boot-efi/nvidia-modules/nvidia.ko",
+      "type": "kernel_module",
+      "sha256": "b1a81a12feecc1dbb6308f75d6891868ba083fca2aa009794e325396388188ba",
+      "size_bytes": 19000656,
+      "upstream_package": "linux-objects-nvidia-595-open-7.0.0-1006-aws",
+      "signature_type": "NVIDIA Open GPU Kernel Module (Canonical Ltd.)"
+    },
+    {
+      "path": "boot-efi/nvidia-modules/nvidia-modeset.ko",
+      "type": "kernel_module",
+      "sha256": "9ce3e671719726e7eb512d7d7c12ef551411cb88b07d1ce880b9da5762b89319",
+      "size_bytes": 2523672,
+      "upstream_package": "linux-objects-nvidia-595-open-7.0.0-1006-aws",
+      "signature_type": "NVIDIA Open GPU Kernel Module (Canonical Ltd.)"
+    },
+    {
+      "path": "boot-efi/nvidia-modules/nvidia-uvm.ko",
+      "type": "kernel_module",
+      "sha256": "aa858f92898585b84b2c50b4c7500656322ad328b86544eb45af1100e4def919",
+      "size_bytes": 3969776,
+      "upstream_package": "linux-objects-nvidia-595-open-7.0.0-1006-aws",
+      "signature_type": "NVIDIA Open GPU Kernel Module (Canonical Ltd.)"
+    },
+    {
+      "path": "boot-efi/nvidia-modules/nvidia-drm.ko",
+      "type": "kernel_module",
+      "sha256": "405ae8f3a6f571297b7320f88b54263b6a604e3afe9e3b2e47cc93c207e2f731",
+      "size_bytes": 297592,
+      "upstream_package": "linux-objects-nvidia-595-open-7.0.0-1006-aws",
+      "signature_type": "NVIDIA Open GPU Kernel Module (Canonical Ltd.)"
+    },
+    {
+      "path": "boot-efi/nvidia-modules/nvidia-peermem.ko",
+      "type": "kernel_module",
+      "sha256": "95094d8058b3ab32d103e339bd72872d4abb905cd4cac11306b3dfdfbc6906cf",
+      "size_bytes": 7960,
+      "upstream_package": "linux-objects-nvidia-595-open-7.0.0-1006-aws",
+      "signature_type": "NVIDIA Open GPU Kernel Module (Canonical Ltd.)"
+    }
+  ]
+}

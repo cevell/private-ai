@@ -1,0 +1,24 @@
+version: "v1"
+domain: "cvm.cevell.com"
+
+confidential:
+  platform: "amd-sev-snp"
+  require_vlek: true
+  dummy_attestation: false
+
+workload:
+  port: 8080
+  containers:
+    - name: "vllm-gpu-inference"
+      image: "vllm/vllm-openai:latest"
+      gpu: true
+      ports:
+        8080: 8080
+
+hardware:
+  gpu_only: true
+  vram_fraction: 0.95
+  auto_tune: true
+
+telemetry:
+  enabled: true

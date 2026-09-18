@@ -1,0 +1,27 @@
+# Modern GPU-Locked vLLM & Multimodal AI Runtime Stack
+vllm==0.29.0
+transformers==5.17.0
+torch==2.13.0
+torchvision==0.28.0
+torchaudio==2.11.0
+qwen-vl-utils==0.0.14
+accelerate==1.15.0
+flashinfer-python==0.6.18
+xgrammar==0.2.7
+compressed-tensors==0.17.0
+torchcodec==0.16.0
+pynvvideocodec==2.0.4
+av==18.1.0
+pillow==12.3.0
+einops==0.8.2
+mistral-common==1.11.7
+fastapi==0.136.3
+uvicorn==0.53.0
+hf_transfer==0.1.9
+huggingface_hub==1.31.0
+
+# Plugins: BitsAndBytes & GGUF Quantization
+vllm-bnb-plugin==0.0.3
+vllm-gguf-plugin==0.0.5
+bitsandbytes==0.50.2
+gguf==0.19.0
