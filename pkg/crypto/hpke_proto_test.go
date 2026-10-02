@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"io"
 	"testing"
@@ -195,9 +196,63 @@ func TestProtoHPKE_LowOrderPublicKey_Rejected(t *testing.T) {
 			t.Fatalf("marshaling proto: %v", err)
 		}
 		_, _, _, err = UnwrapProtoHPKERequest(serverPriv, rawBytes, nil)
+		_ = serverPriv
 		if !errors.Is(err, ErrLowOrderPublicKey) {
 			t.Fatalf("expected ErrLowOrderPublicKey, got %v", err)
 		}
 	}
 }
+
+func TestProtoHPKE_KeyReuseDifferentNoncesProducesUniqueResponseKeys(t *testing.T) {
+	var serverPriv, serverPub [32]byte
+	if _, err := io.ReadFull(rand.Reader, serverPriv[:]); err != nil {
+		t.Fatalf("generating server keypair: %v", err)
+	}
+	curve25519.ScalarBaseMult(&serverPub, &serverPriv)
+
+	var clientPriv, clientPub [32]byte
+	if _, err := io.ReadFull(rand.Reader, clientPriv[:]); err != nil {
+		t.Fatalf("generating client keypair: %v", err)
+	}
+	curve25519.ScalarBaseMult(&clientPub, &clientPriv)
+
+	// Two requests using identical client private/public key
+	raw1, clientSession1, err := EncryptProtoHPKERequest(clientPriv, serverPub, []byte(`{"prompt":"one"}`), nil, "req-1")
+	if err != nil {
+		t.Fatalf("encrypting req 1: %v", err)
+	}
+
+	raw2, clientSession2, err := EncryptProtoHPKERequest(clientPriv, serverPub, []byte(`{"prompt":"two"}`), nil, "req-2")
+	if err != nil {
+		t.Fatalf("encrypting req 2: %v", err)
+	}
+
+	// Server unwraps both requests
+	_, serverSession1, _, err := UnwrapProtoHPKERequest(serverPriv, raw1, nil)
+	if err != nil {
+		t.Fatalf("unwrapping req 1: %v", err)
+	}
+
+	_, serverSession2, _, err := UnwrapProtoHPKERequest(serverPriv, raw2, nil)
+	if err != nil {
+		t.Fatalf("unwrapping req 2: %v", err)
+	}
+
+	// Verify client sessions match server sessions
+	if subtle.ConstantTimeCompare(clientSession1.ResponseKey[:], serverSession1.ResponseKey[:]) != 1 {
+		t.Fatal("session 1 client/server response key mismatch")
+	}
+	if subtle.ConstantTimeCompare(clientSession2.ResponseKey[:], serverSession2.ResponseKey[:]) != 1 {
+		t.Fatal("session 2 client/server response key mismatch")
+	}
+
+	// CRITICAL ASSERTION (Option 2): ResponseKey and ResponseIV MUST be distinct despite identical client key
+	if subtle.ConstantTimeCompare(serverSession1.ResponseKey[:], serverSession2.ResponseKey[:]) == 1 {
+		t.Fatal("CRITICAL DEFECT: ResponseKey reused across sessions with identical client public key!")
+	}
+	if subtle.ConstantTimeCompare(serverSession1.ResponseIV[:], serverSession2.ResponseIV[:]) == 1 {
+		t.Fatal("CRITICAL DEFECT: ResponseIV reused across sessions with identical client public key!")
+	}
+}
+
 

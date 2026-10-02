@@ -305,5 +305,36 @@ func TestHPKELowOrderPublicKeyRejection(t *testing.T) {
 	}
 }
 
+func TestBinaryHPKE_KeyReuseDifferentNoncesProducesUniqueResponseKeys(t *testing.T) {
+	serverPriv, serverPub, err := GenerateHPKEKeyPair()
+	assert.NoError(t, err)
+
+	clientPriv, _, err := GenerateHPKEKeyPair()
+	assert.NoError(t, err)
+
+	// Two requests using identical client private/public key
+	raw1, clientSession1, err := EncryptBinaryHPKERequest(clientPriv, serverPub, []byte(`{"prompt":"one"}`))
+	assert.NoError(t, err)
+
+	raw2, clientSession2, err := EncryptBinaryHPKERequest(clientPriv, serverPub, []byte(`{"prompt":"two"}`))
+	assert.NoError(t, err)
+
+	// Server unwraps both requests
+	_, serverSession1, err := UnwrapBinaryHPKERequest(serverPriv, raw1)
+	assert.NoError(t, err)
+
+	_, serverSession2, err := UnwrapBinaryHPKERequest(serverPriv, raw2)
+	assert.NoError(t, err)
+
+	// Verify client sessions match server sessions
+	assert.Equal(t, clientSession1.ResponseKey, serverSession1.ResponseKey)
+	assert.Equal(t, clientSession2.ResponseKey, serverSession2.ResponseKey)
+
+	// CRITICAL ASSERTION (Option 2): ResponseKey and ResponseIV MUST be distinct despite identical client key
+	assert.NotEqual(t, serverSession1.ResponseKey, serverSession2.ResponseKey, "CRITICAL DEFECT: ResponseKey reused across sessions with identical client public key!")
+	assert.NotEqual(t, serverSession1.ResponseIV, serverSession2.ResponseIV, "CRITICAL DEFECT: ResponseIV reused across sessions with identical client public key!")
+}
+
+
 
 

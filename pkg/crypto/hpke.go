@@ -350,7 +350,8 @@ func UnwrapBinaryHPKERequest(recipientPriv [32]byte, rawBody []byte) ([]byte, *H
 	}
 	defer Zeroize(sharedSecret)
 
-	// 2. Derive request key, response key, and response IV via HKDF-SHA256
+	// 2. Derive request key, response key, and response IV via HKDF-SHA256.
+	// Binds client request nonce into response key derivation (Option 2) to eliminate across-session nonce reuse.
 	reqKeyReader := hkdf.New(sha256.New, sharedSecret, nil, []byte("cevell-hpke-req-aes-gcm"))
 	var reqKey [32]byte
 	if _, err := io.ReadFull(reqKeyReader, reqKey[:]); err != nil {
@@ -358,14 +359,14 @@ func UnwrapBinaryHPKERequest(recipientPriv [32]byte, rawBody []byte) ([]byte, *H
 	}
 	defer Zeroize(reqKey[:])
 
-	respKeyReader := hkdf.New(sha256.New, sharedSecret, nil, []byte("cevell-hpke-resp-aes-gcm"))
+	respKeyReader := hkdf.New(sha256.New, sharedSecret, nonce, []byte("cevell-hpke-resp-aes-gcm"))
 	var respKey [32]byte
 	if _, err := io.ReadFull(respKeyReader, respKey[:]); err != nil {
 		return nil, nil, fmt.Errorf("deriving response key: %w", err)
 	}
 	defer Zeroize(respKey[:])
 
-	respIVReader := hkdf.New(sha256.New, sharedSecret, nil, []byte("cevell-hpke-resp-base-iv"))
+	respIVReader := hkdf.New(sha256.New, sharedSecret, nonce, []byte("cevell-hpke-resp-base-iv"))
 	var respIV [12]byte
 	if _, err := io.ReadFull(respIVReader, respIV[:]); err != nil {
 		return nil, nil, fmt.Errorf("deriving response base IV: %w", err)
@@ -413,6 +414,11 @@ func EncryptBinaryHPKERequest(clientPriv [32]byte, recipientPub [32]byte, plaint
 	}
 	defer Zeroize(sharedSecret)
 
+	nonce := make([]byte, 12)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, nil, fmt.Errorf("generating request nonce: %w", err)
+	}
+
 	reqKeyReader := hkdf.New(sha256.New, sharedSecret, nil, []byte("cevell-hpke-req-aes-gcm"))
 	var reqKey [32]byte
 	if _, err := io.ReadFull(reqKeyReader, reqKey[:]); err != nil {
@@ -420,14 +426,14 @@ func EncryptBinaryHPKERequest(clientPriv [32]byte, recipientPub [32]byte, plaint
 	}
 	defer Zeroize(reqKey[:])
 
-	respKeyReader := hkdf.New(sha256.New, sharedSecret, nil, []byte("cevell-hpke-resp-aes-gcm"))
+	respKeyReader := hkdf.New(sha256.New, sharedSecret, nonce, []byte("cevell-hpke-resp-aes-gcm"))
 	var respKey [32]byte
 	if _, err := io.ReadFull(respKeyReader, respKey[:]); err != nil {
 		return nil, nil, fmt.Errorf("deriving response key: %w", err)
 	}
 	defer Zeroize(respKey[:])
 
-	respIVReader := hkdf.New(sha256.New, sharedSecret, nil, []byte("cevell-hpke-resp-base-iv"))
+	respIVReader := hkdf.New(sha256.New, sharedSecret, nonce, []byte("cevell-hpke-resp-base-iv"))
 	var respIV [12]byte
 	if _, err := io.ReadFull(respIVReader, respIV[:]); err != nil {
 		return nil, nil, fmt.Errorf("deriving response base IV: %w", err)
@@ -441,11 +447,6 @@ func EncryptBinaryHPKERequest(clientPriv [32]byte, recipientPub [32]byte, plaint
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating GCM: %w", err)
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, nil, fmt.Errorf("generating request nonce: %w", err)
 	}
 
 	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
