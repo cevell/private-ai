@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -144,16 +145,41 @@ func TestSetupProxyRoutes_LaunchKeyAndVisibility(t *testing.T) {
 	muxUnenrolled.ServeHTTP(recModelsPre, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
 	assert.Equal(t, http.StatusUnauthorized, recModelsPre.Code)
 
-	// 1.6 Unmapped/registration endpoints on unenrolled node return 401 lockdown
-	recRegPre := httptest.NewRecorder()
-	muxUnenrolled.ServeHTTP(recRegPre, httptest.NewRequest(http.MethodPost, "/v1/auth/register", nil))
-	assert.Equal(t, http.StatusUnauthorized, recRegPre.Code)
-	assert.Contains(t, recRegPre.Body.String(), "locked down until authorized public key is provisioned at launch")
-
-	// Phase 2: Launch-Provisioned Authorized Key Verification
+	// Phase 2: Dynamic Single-Key Enrollment on Unenrolled Node
 	clientPub, clientPriv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 
+	// 2.1 Invalid PoP signature rejected
+	badBody := []byte(fmt.Sprintf(`{"public_key":"%s"}`, hex.EncodeToString(clientPub)))
+	reqBadPoP := httptest.NewRequest(http.MethodPost, "/v1/auth/register", bytes.NewReader(badBody))
+	reqBadPoP.Header.Set("Authorization", "Cevell-Ed25519 signature=badbad, timestamp=123, nonce=nonc, request_id=bad")
+	recBadPoP := httptest.NewRecorder()
+	muxUnenrolled.ServeHTTP(recBadPoP, reqBadPoP)
+	assert.Equal(t, http.StatusUnauthorized, recBadPoP.Code)
+
+	// 2.2 Valid PoP signature succeeds
+	nowTs := time.Now().Unix()
+	nonce := "regnonce12345678"
+	regBody := []byte(fmt.Sprintf(`{"public_key":"%s"}`, hex.EncodeToString(clientPub)))
+	sig := auth.SignPayload(clientPriv, "POST", "/v1/auth/register", "req-enroll-1", nowTs, nonce, regBody)
+
+	reqEnroll := httptest.NewRequest(http.MethodPost, "/v1/auth/register", bytes.NewReader(regBody))
+	reqEnroll.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s", sig, nowTs, nonce, "req-enroll-1"))
+	recEnroll := httptest.NewRecorder()
+	muxUnenrolled.ServeHTTP(recEnroll, reqEnroll)
+	assert.Equal(t, http.StatusOK, recEnroll.Code)
+	assert.Contains(t, recEnroll.Body.String(), "enrolled")
+	assert.Contains(t, recEnroll.Body.String(), hex.EncodeToString(clientPub))
+
+	// 2.3 Duplicate enrollment attempt rejected (409 Conflict - single-key invariant)
+	recDup := httptest.NewRecorder()
+	reqDup := httptest.NewRequest(http.MethodPost, "/v1/auth/register", bytes.NewReader(regBody))
+	reqDup.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s", sig, nowTs, nonce, "req-enroll-1"))
+	muxUnenrolled.ServeHTTP(recDup, reqDup)
+	assert.Equal(t, http.StatusConflict, recDup.Code)
+	assert.Contains(t, recDup.Body.String(), "strictly single-key per lifecycle")
+
+	// Phase 3: Launch-Provisioned Authorized Key Verification (Side-Grade Backup)
 	latchedVerifier := auth.NewEd25519Verifier(clientPub, 0, 0)
 	vmLatched := NewVisibilityManager(latchedVerifier)
 
@@ -168,18 +194,11 @@ func TestSetupProxyRoutes_LaunchKeyAndVisibility(t *testing.T) {
 	mux, err := SetupProxyRoutes(cfgLatched)
 	require.NoError(t, err)
 
-	// 2.1 Removed key registration endpoints: unauthenticated returns 401, authenticated returns 404 Not Found
-	recRegUnauth := httptest.NewRecorder()
-	mux.ServeHTTP(recRegUnauth, httptest.NewRequest(http.MethodPost, "/v1/auth/register", nil))
-	assert.Equal(t, http.StatusUnauthorized, recRegUnauth.Code)
-
-	nowTsReg := time.Now().Unix()
-	sigReg := auth.SignPayload(clientPriv, "POST", "/v1/auth/register", "req-reg-test", nowTsReg, "regnonce112233", nil)
-	reqRegAuth := httptest.NewRequest(http.MethodPost, "/v1/auth/register", nil)
-	reqRegAuth.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s", sigReg, nowTsReg, "regnonce112233", "req-reg-test"))
-	recRegAuth := httptest.NewRecorder()
-	mux.ServeHTTP(recRegAuth, reqRegAuth)
-	assert.Equal(t, http.StatusNotFound, recRegAuth.Code)
+	// 3.0 On launch-provisioned node, dynamic registration returns 409 Conflict (immutable key)
+	recRegLatched := httptest.NewRecorder()
+	mux.ServeHTTP(recRegLatched, httptest.NewRequest(http.MethodPost, "/v1/auth/register", nil))
+	assert.Equal(t, http.StatusConflict, recRegLatched.Code)
+	assert.Contains(t, recRegLatched.Body.String(), "strictly single-key per lifecycle")
 
 	// Phase 3: Post-Latching Visibility & Control
 	// 3.1 Health defaults to public -> unauthenticated GET succeeds
@@ -194,12 +213,12 @@ func TestSetupProxyRoutes_LaunchKeyAndVisibility(t *testing.T) {
 
 	// 3.3 Dynamic Toggle via /v1/admin/visibility (authenticated with clientPriv)
 	toggleBody := []byte(`{"health":"hidden"}`)
-	nowTs := time.Now().Unix()
-	nonce := "visnonce87654321"
-	toggleSig := auth.SignPayload(clientPriv, "POST", "/v1/admin/visibility", "req-toggle-1", nowTs, nonce, toggleBody)
+	nowTsToggle := time.Now().Unix()
+	nonceToggle := "visnonce87654321"
+	toggleSig := auth.SignPayload(clientPriv, "POST", "/v1/admin/visibility", "req-toggle-1", nowTsToggle, nonceToggle, toggleBody)
 
 	reqToggle := httptest.NewRequest(http.MethodPost, "/v1/admin/visibility", bytes.NewReader(toggleBody))
-	reqToggle.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s", toggleSig, nowTs, nonce, "req-toggle-1"))
+	reqToggle.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s", toggleSig, nowTsToggle, nonceToggle, "req-toggle-1"))
 	recToggle := httptest.NewRecorder()
 	mux.ServeHTTP(recToggle, reqToggle)
 	assert.Equal(t, http.StatusOK, recToggle.Code)

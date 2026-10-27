@@ -130,12 +130,12 @@ func runNodeSupervisor() {
 	system.Log("Discovering and latching tenant authorized Ed25519 public key...")
 	verifier, err := auth.NewDefaultEd25519Verifier()
 	if err != nil {
-		system.LogError("[FATAL SECURITY FAILURE] Failed to latch authorized tenant public key: %v", err)
-		system.LogError("[HALT] PID 1 cannot exit (kernel panic). Node will fail closed until rebooted with valid cevell-auth-pub metadata.")
-		select {}
+		system.Log("No launch-time key metadata detected (%v). Initializing dynamic network enrollment mode on port 443...", err)
+		authVerifier = auth.NewDynamicVerifier()
+	} else {
+		authVerifier = verifier
+		system.Log("[✓] Authorized Ed25519 Public Key Latched: %s", authVerifier.GetPublicKeyHex())
 	}
-	authVerifier = verifier
-	system.Log("[✓] Authorized Ed25519 Public Key Latched: %s", authVerifier.GetPublicKeyHex())
 
 	// Step 6: Cryptographic key generation
 	system.Log("Initializing node identity & ephemeral encryption keys...")

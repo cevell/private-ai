@@ -214,6 +214,9 @@ func SetupProxyRoutes(cfg *ServerConfig) (*http.ServeMux, error) {
 	// 5. Diagnostic Egress Probe Endpoint: POST /v1/system/probe-egress (Toggleable with authorized Ed25519 key)
 	RegisterEgressProbeEndpoint(mux, ed25519Verifier, visibilityMgr)
 
+	// 5b. Dynamic Single-Key Enrollment Endpoint: POST /v1/auth/register & /v1/auth/enroll
+	RegisterEnrollmentEndpoints(mux, ed25519Verifier, cfg)
+
 	// 6. Dynamic Visibility Management: GET/POST /v1/admin/visibility (Authenticated with authorized Ed25519 key)
 	mux.HandleFunc("/v1/admin/visibility", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -221,7 +224,7 @@ func SetupProxyRoutes(cfg *ServerConfig) (*http.ServeMux, error) {
 		if !ed25519Verifier.IsEnrolled() {
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "Enclave is unenrolled. Authorized public key must be provisioned at launch.",
+				"error": "Enclave is unenrolled. Authorized public key must be registered via POST /v1/auth/register or provisioned at launch.",
 			})
 			return
 		}
@@ -470,7 +473,7 @@ func SetupProxyRoutes(cfg *ServerConfig) (*http.ServeMux, error) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "Enclave is unenrolled. System is locked down until authorized public key is provisioned at launch.",
+				"error": "Enclave is unenrolled. System is locked down until authorized public key is registered via POST /v1/auth/register or provisioned at launch.",
 			})
 			return
 		}
