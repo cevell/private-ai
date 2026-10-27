@@ -1,6 +1,6 @@
 {
   "version": "v1.0.0",
-  "roothash": "afbcde7a4cdf2b3593a6d843426dd51a46a8cfd0062c5ae2f9244038d645a796",
+  "roothash": "2251e73e9c222d235975d654afed0176825bc6d82a2aa49e45620292b09c8d5a",
   "measurements": {
     "intel_tdx": {
       "mrtd": "c1ee9c16e3afc506cfe042c5b846a368528f3b37618eafb27469bc114cf914e9222c91618470e7f2b28ac360968270a5",
