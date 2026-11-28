@@ -43,7 +43,8 @@ type ModelSupervisor interface {
 type SealConfig struct {
 	Verifier      *auth.Ed25519Verifier
 	Supervisor    ModelSupervisor
-	EgressApplier func() error // Defaults to network.ApplySealedEgressPolicy; injectable for testing
+	EgressApplier func() error                  // Defaults to network.ApplySealedEgressPolicy; injectable for testing
+	OnSealed      func() (map[string]any, error) // Optional post-egress-lock hook (e.g. HPKE key rotation & attestation refresh)
 }
 
 // SealAuthGuard wraps an HTTP handler to require valid Ed25519 authentication
@@ -152,6 +153,20 @@ func RegisterSealEndpoint(mux *http.ServeMux, cfg *SealConfig) {
 			return
 		}
 
+		var extraMeta map[string]any
+		if cfg.OnSealed != nil {
+			meta, onSealErr := cfg.OnSealed()
+			if onSealErr != nil {
+				system.LogError("[SEAL FAILED] Post-seal rotation/attestation error: %v", onSealErr)
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"error": fmt.Sprintf("Seal failed: post-seal rotation/attestation error: %v", onSealErr),
+				})
+				return
+			}
+			extraMeta = meta
+		}
+
 		// Latch sealed state permanently
 		sealState.Store(1)
 		sealedAt := time.Now().Unix()
@@ -169,6 +184,9 @@ func RegisterSealEndpoint(mux *http.ServeMux, cfg *SealConfig) {
 			"outbound_egress": "blocked",
 			"inbound_policy":  "authenticated_only",
 			"active_model":    activeModel,
+		}
+		for k, v := range extraMeta {
+			resp[k] = v
 		}
 		if sealReq.Force {
 			resp["forced"] = true

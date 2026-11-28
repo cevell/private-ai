@@ -180,7 +180,9 @@ func TestArchitectureAwareFlagSelection(t *testing.T) {
 	hopperArgs := BuildVLLMArgs(spec, hopperTopo, 1, 8000)
 	assert.Contains(t, hopperArgs, "--attention-config")
 	assert.Contains(t, hopperArgs, `{"flash_attn_version": 2}`)
-	assert.Contains(t, hopperArgs, "--enforce-eager")
+	assert.Contains(t, hopperArgs, "--compilation-config")
+	assert.Contains(t, hopperArgs, `{"mode": 0, "cudagraph_mode": "FULL_DECODE_ONLY"}`)
+	assert.NotContains(t, hopperArgs, "--enforce-eager")
 	assert.Contains(t, hopperArgs, "--dtype")
 	assert.Contains(t, hopperArgs, "auto")
 
@@ -417,3 +419,60 @@ func TestResolveReasoningParser(t *testing.T) {
 
 
 
+
+func TestBuildVLLMArgs_SecurityDefaults(t *testing.T) {
+	adaTopo := hardware.TopologyReport{
+		HasGPU:            true,
+		GPUCount:          1,
+		IsAdaGPU:          true,
+		GPUArchitecture:   "Ada",
+		ComputeCapability: 8.9,
+		GPUModel:          "NVIDIA L4",
+	}
+
+	// Standard HF model: enforces --load-format safetensors
+	hfArgs := BuildVLLMArgs(ModelSpec{Model: "Qwen/Qwen2.5-7B-Instruct", Quantization: "fp8"}, adaTopo, 1, 8000)
+	assert.Contains(t, hfArgs, "--load-format")
+	assert.Contains(t, hfArgs, "safetensors")
+	assert.Contains(t, hfArgs, "--quantization")
+	assert.Contains(t, hfArgs, "fp8")
+
+	// GGUF model: enforces --quantization gguf (not safetensors)
+	ggufArgs := BuildVLLMArgs(ModelSpec{Model: "bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M.gguf"}, adaTopo, 1, 8000)
+	assert.Contains(t, ggufArgs, "--quantization")
+	assert.Contains(t, ggufArgs, "gguf")
+	assert.NotContains(t, ggufArgs, "safetensors")
+}
+
+func TestLoadModel_AllowlistValidation(t *testing.T) {
+	sup := NewSupervisor(8000)
+	config.SetTarget("cpu")
+	defer config.SetTarget("gpu")
+
+	// Unsupported quantization rejected
+	err := sup.LoadModel(nil, ModelSpec{
+		Model:          "Qwen/Qwen2.5-7B-Instruct",
+		Quantization:   "--evil-flag",
+		ExposeInHealth: boolPtr(false),
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported quantization")
+
+	// Unsupported tool_call_parser rejected
+	err = sup.LoadModel(nil, ModelSpec{
+		Model:          "Qwen/Qwen2.5-7B-Instruct",
+		ToolCallParser: "evil_parser",
+		ExposeInHealth: boolPtr(false),
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported tool_call_parser")
+
+	// Unsupported reasoning_parser rejected
+	err = sup.LoadModel(nil, ModelSpec{
+		Model:           "Qwen/Qwen2.5-7B-Instruct",
+		ReasoningParser: "evil_reasoning",
+		ExposeInHealth:  boolPtr(false),
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported reasoning_parser")
+}

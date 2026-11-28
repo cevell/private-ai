@@ -137,6 +137,8 @@ Cevell OS enforces a strict zero-trust tenant authentication model without stati
 
 ## License
 
-Cevell OS is licensed under the **Apache License, Version 2.0** ([LICENSE](LICENSE)). See [NOTICE](NOTICE) for copyright attribution and contact details ([contact@mail.cevell.com](mailto:contact@mail.cevell.com) / [cevell.com](https://cevell.com)).
+Cevell OS is licensed under the **PolyForm Shield License 1.0.0** ([LICENSE](LICENSE)).
 
+- **Permitted Use (Free for Internal & Self-Hosted Operations)**: Free for internal commercial business operations, private enterprise deployments on on-premises or cloud infrastructure, personal research, benchmarking, security audits, and cryptographic silicon attestation verification (dm-verity, UKI PCRs, MRTD).
+- **Prohibited Use (Anti-Competition & Arbitrage Protection)**: Providing the software, runtime, or derived images as a hosted service, managed platform, compute-as-a-service, or commercial substitute competing with [cevell.com](https://cevell.com) is strictly prohibited without a commercial license. For commercial licensing and partnership inquiries, visit [cevell.com](https://cevell.com) or contact [contact@mail.cevell.com](mailto:contact@mail.cevell.com).
 - **Third-Party Components**: Upstream packages (Linux kernel, NVIDIA open drivers, BusyBox, etc.) are governed by their respective upstream licenses ([THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)).

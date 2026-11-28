@@ -338,3 +338,29 @@ func TestBinaryHPKE_KeyReuseDifferentNoncesProducesUniqueResponseKeys(t *testing
 
 
 
+
+func TestKeyPairRotateHPKEKey(t *testing.T) {
+	keyPair, err := GenerateNodeKeyPair()
+	require.NoError(t, err)
+
+	oldPriv := keyPair.HPKEPrivKey
+	oldPub := keyPair.HPKEPubKey
+
+	newPub, err := keyPair.RotateHPKEKey()
+	require.NoError(t, err)
+	assert.NotEqual(t, oldPub, newPub)
+	assert.Equal(t, newPub, keyPair.HPKEPubKey)
+	assert.NotEqual(t, oldPriv, keyPair.HPKEPrivKey)
+
+	// New keypair decrypts payloads sealed to newPub, and rejects payloads sealed to oldPub
+	ciphertextNew, err := EncryptPayloadHPKE(newPub, []byte("post-seal"), nil)
+	require.NoError(t, err)
+	decrypted, err := DecryptPayloadHPKE(keyPair.HPKEPrivKey, ciphertextNew, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("post-seal"), decrypted)
+
+	ciphertextOld, err := EncryptPayloadHPKE(oldPub, []byte("pre-seal"), nil)
+	require.NoError(t, err)
+	_, err = DecryptPayloadHPKE(keyPair.HPKEPrivKey, ciphertextOld, nil)
+	assert.Error(t, err)
+}

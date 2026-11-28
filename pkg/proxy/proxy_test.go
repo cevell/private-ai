@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cevell/private-ai/pkg/attestation"
 	"github.com/cevell/private-ai/pkg/auth"
 	"github.com/cevell/private-ai/pkg/config"
 	"github.com/cevell/private-ai/pkg/crypto"
@@ -871,3 +872,193 @@ func TestProxyLoopbackTransport_LoadShedding(t *testing.T) {
 
 
 
+
+func TestValidateInferencePayload(t *testing.T) {
+	// 1. Reject arbitrary chat_template override
+	err := validateInferencePayload([]byte(`{"model":"qwen","chat_template":"{{ ''.__class__ }}","messages":[{"role":"user","content":"hi"}]}`))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "chat_template")
+
+	// 2. Allow safe boolean, enum, and numeric chat_template_kwargs
+	err = validateInferencePayload([]byte(`{"model":"qwen","chat_template_kwargs":{"enable_thinking":false,"preserve_thinking":true,"clear_thinking":false,"add_generation_prompt":true,"reasoning_effort":"high","thinking_budget":2048},"messages":[{"role":"user","content":"hi"}]}`))
+	assert.NoError(t, err)
+
+	// 3. Reject unknown, invalid enum, or wrong-type chat_template_kwargs
+	err = validateInferencePayload([]byte(`{"model":"qwen","chat_template_kwargs":{"custom_jinja":"bad"}}`))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported chat_template_kwargs")
+
+	err = validateInferencePayload([]byte(`{"model":"qwen","chat_template_kwargs":{"enable_thinking":"false"}}`))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must be a boolean")
+
+	err = validateInferencePayload([]byte(`{"model":"qwen","chat_template_kwargs":{"reasoning_effort":"{{bad}}"}}`))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported value")
+
+	// 4. Reject external image_url / audio_url / video_url
+	err = validateInferencePayload([]byte(`{"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://evil.example/img.png"}}]}]}`))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "external media URLs are disabled")
+
+	err = validateInferencePayload([]byte(`{"messages":[{"role":"user","content":[{"type":"audio_url","audio_url":{"url":"http://169.254.169.254/latest/meta-data/"}}]}]}`))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "external media URLs are disabled")
+
+	// 5. Allow inline base64 data: URI for multimodal
+	err = validateInferencePayload([]byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"describe"},{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgo="}}]}]}`))
+	assert.NoError(t, err)
+}
+
+func TestSealRotatesHPKEKeyAndRefreshesAttestation(t *testing.T) {
+	SetSealedForTesting(false)
+	defer SetSealedForTesting(false)
+
+	config.SetTarget("cpu")
+	defer config.SetTarget("")
+
+	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-seal","choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer mockUpstream.Close()
+
+	keyPair, err := crypto.GenerateNodeKeyPair()
+	require.NoError(t, err)
+	oldHPKEPub := keyPair.HPKEPubKey
+
+	clientPub, clientPriv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	var authPub32 [32]byte
+	copy(authPub32[:], clientPub)
+
+	verifier := auth.NewEd25519Verifier(clientPub, 0, 0)
+	sup := inference.NewSupervisor(8000)
+	sup.SetReadyForTest(true)
+
+	mockQuoteFn := func(userData [64]byte) ([]byte, string, string, error) {
+		// Embed userData into the mock quote bytes so we can verify hardware binding directly
+		quote := append([]byte("mock-quote-"), userData[:]...)
+		return quote, "mock-chain", attestation.PlatformTDX, nil
+	}
+
+	var bootNonce [32]byte
+	bootQuote, bootChain, bootPlat, err := mockQuoteFn(attestation.ComputeCompositeUserDataWithSeal(keyPair.TLSKeyFP, oldHPKEPub, bootNonce, nil, authPub32, false))
+	require.NoError(t, err)
+	bootDoc := attestation.BuildAttestationDocumentWithEvidence(attestation.BindingData{
+		TLSKeyFingerprint: keyPair.TLSKeyFP,
+		HPKEPublicKey:     oldHPKEPub,
+		AuthPublicKey:     authPub32,
+		Sealed:            false,
+	}, bootQuote, bootChain, bootPlat, "tls-cert", hex.EncodeToString(bootNonce[:]), nil)
+
+	cfg := &ServerConfig{
+		KeyPair:          keyPair,
+		Verifier:         verifier,
+		Supervisor:       sup,
+		UpstreamURL:      mockUpstream.URL,
+		TLSCertPEM:       []byte("tls-cert"),
+		AttestationDoc:   bootDoc,
+		EgressApplier:    func() error { return nil },
+		HardwareAttester: mockQuoteFn,
+	}
+
+	mux, err := SetupProxyRoutes(cfg)
+	require.NoError(t, err)
+
+	// 1. Pre-seal attestation shows sealed=false and oldHPKEPub
+	reqAttPre := httptest.NewRequest(http.MethodGet, "/v1/attestation", nil)
+	recAttPre := httptest.NewRecorder()
+	mux.ServeHTTP(recAttPre, reqAttPre)
+	require.Equal(t, http.StatusOK, recAttPre.Code)
+	var preDoc attestation.AttestationDocument
+	require.NoError(t, json.Unmarshal(recAttPre.Body.Bytes(), &preDoc))
+	assert.False(t, preDoc.Predicate.Sealed)
+	assert.Equal(t, hex.EncodeToString(oldHPKEPub[:]), preDoc.Predicate.HPKEPublicKey)
+
+	// 2. Seal enclave -> rotates HPKE key and refreshes AttestationDoc with sealed=true
+	nowTs := time.Now().Unix()
+	sealSig := auth.SignPayload(clientPriv, http.MethodPost, "/v1/system/seal", "req-seal-rot", nowTs, "nonce-seal-rot", nil)
+	reqSeal := httptest.NewRequest(http.MethodPost, "/v1/system/seal", nil)
+	reqSeal.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s",
+		sealSig, nowTs, "nonce-seal-rot", "req-seal-rot"))
+	recSeal := httptest.NewRecorder()
+	mux.ServeHTTP(recSeal, reqSeal)
+	require.Equal(t, http.StatusOK, recSeal.Code)
+
+	var sealResp map[string]any
+	require.NoError(t, json.Unmarshal(recSeal.Body.Bytes(), &sealResp))
+	assert.Equal(t, true, sealResp["sealed"])
+	assert.Equal(t, true, sealResp["attestation_refreshed"])
+	newHPKEPubHex, _ := sealResp["hpke_public_key"].(string)
+	assert.NotEmpty(t, newHPKEPubHex)
+	assert.NotEqual(t, hex.EncodeToString(oldHPKEPub[:]), newHPKEPubHex)
+
+	// 3. Dynamic post-seal attestation requires auth, returns sealed=true and new HPKE key in REPORT_DATA
+	challengeNonce := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	attPath := "/v1/attestation?nonce=" + challengeNonce
+	attSig := auth.SignPayload(clientPriv, http.MethodGet, "/v1/attestation", "req-att-post", nowTs, "nonce-att-post", nil)
+	reqAttPost := httptest.NewRequest(http.MethodGet, attPath, nil)
+	reqAttPost.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s",
+		attSig, nowTs, "nonce-att-post", "req-att-post"))
+	recAttPost := httptest.NewRecorder()
+	mux.ServeHTTP(recAttPost, reqAttPost)
+	require.Equal(t, http.StatusOK, recAttPost.Code)
+
+	var postDoc attestation.AttestationDocument
+	require.NoError(t, json.Unmarshal(recAttPost.Body.Bytes(), &postDoc))
+	assert.True(t, postDoc.Predicate.Sealed)
+	assert.Equal(t, newHPKEPubHex, postDoc.Predicate.HPKEPublicKey)
+
+	newHPKEPubBytes, err := hex.DecodeString(newHPKEPubHex)
+	require.NoError(t, err)
+	var newHPKEPub [32]byte
+	copy(newHPKEPub[:], newHPKEPubBytes)
+
+	challengeBytes, err := hex.DecodeString(challengeNonce)
+	require.NoError(t, err)
+	var challenge32 [32]byte
+	copy(challenge32[:], challengeBytes)
+
+	userDataBytes, err := hex.DecodeString(postDoc.Predicate.UserData)
+	require.NoError(t, err)
+	var userDataArr [64]byte
+	copy(userDataArr[:], userDataBytes)
+	assert.True(t, attestation.VerifyCompositeUserDataWithSeal(userDataArr, keyPair.TLSKeyFP, newHPKEPub, challenge32, nil, authPub32, true))
+	assert.False(t, attestation.VerifyCompositeUserDataWithSeal(userDataArr, keyPair.TLSKeyFP, newHPKEPub, challenge32, nil, authPub32, false))
+
+	// 4. Pre-seal HPKE key ciphertext is REJECTED post-seal
+	_, clientEphPriv, err := crypto.GenerateHPKEKeyPair()
+	require.NoError(t, err)
+	chatPayload := []byte(`{"model":"mock","messages":[{"role":"user","content":"hello"}]}`)
+	staleCiphertext, _, err := crypto.EncryptBinaryHPKERequest(clientEphPriv, oldHPKEPub, chatPayload)
+	require.NoError(t, err)
+	staleSig := auth.SignPayload(clientPriv, http.MethodPost, "/v1/chat/completions", "req-stale", nowTs, "nonce-stale", staleCiphertext)
+	reqStale := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(staleCiphertext))
+	reqStale.Header.Set("Content-Type", "application/octet-stream")
+	reqStale.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s",
+		staleSig, nowTs, "nonce-stale", "req-stale"))
+	recStale := httptest.NewRecorder()
+	mux.ServeHTTP(recStale, reqStale)
+	assert.Equal(t, http.StatusBadRequest, recStale.Code)
+
+	// 5. Post-seal HPKE key ciphertext SUCCEEDS
+	freshCiphertext, clientSession, err := crypto.EncryptBinaryHPKERequest(clientEphPriv, newHPKEPub, chatPayload)
+	require.NoError(t, err)
+	freshSig := auth.SignPayload(clientPriv, http.MethodPost, "/v1/chat/completions", "req-fresh", nowTs, "nonce-fresh", freshCiphertext)
+	reqFresh := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(freshCiphertext))
+	reqFresh.Header.Set("Content-Type", "application/octet-stream")
+	reqFresh.Header.Set("Authorization", fmt.Sprintf("Cevell-Ed25519 signature=%s, timestamp=%d, nonce=%s, request_id=%s",
+		freshSig, nowTs, "nonce-fresh", "req-fresh"))
+	recFresh := httptest.NewRecorder()
+	mux.ServeHTTP(recFresh, reqFresh)
+	require.Equal(t, http.StatusOK, recFresh.Code)
+
+	frames, err := parseBinaryFrames(recFresh.Body.Bytes())
+	require.NoError(t, err)
+	require.NotEmpty(t, frames)
+	_, _, respPayload, err := clientSession.DecryptFrame(frames[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(respPayload), `"content":"ok"`)
+}

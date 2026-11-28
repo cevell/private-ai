@@ -72,6 +72,22 @@ func GenerateHPKEKeyPair() ([32]byte, [32]byte, error) {
 	return priv, pub, nil
 }
 
+// RotateHPKEKey generates a fresh X25519 HPKE keypair, securely zeroizes the previous private key,
+// and installs the new keypair on kp. Callers must hold external synchronization if shared across goroutines.
+func (kp *KeyPair) RotateHPKEKey() ([32]byte, error) {
+	if kp == nil {
+		return [32]byte{}, fmt.Errorf("cannot rotate HPKE key on nil KeyPair")
+	}
+	newPriv, newPub, err := GenerateHPKEKeyPair()
+	if err != nil {
+		return [32]byte{}, err
+	}
+	Zeroize(kp.HPKEPrivKey[:])
+	kp.HPKEPrivKey = newPriv
+	kp.HPKEPubKey = newPub
+	return newPub, nil
+}
+
 // Zeroize securely wipes private key material from memory.
 func (kp *KeyPair) Zeroize() {
 	if kp == nil {

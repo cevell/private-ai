@@ -179,3 +179,39 @@ func TestDocument_WriteAttestationToDisk(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, content, readBytes)
 }
+
+func TestDocument_SealedStateBinding(t *testing.T) {
+	var tlsFP, hpkeKey, nonce, authKey [32]byte
+	copy(tlsFP[:], []byte("node-tls-fp-32-bytes-long-string"))
+	copy(hpkeKey[:], []byte("hpke-public-key-32-bytes-string-"))
+	copy(nonce[:], []byte("session-nonce-32-bytes-arbitrary"))
+	copy(authKey[:], []byte("tenant-auth-key-32-bytes-string-"))
+
+	binding := BindingData{
+		TLSKeyFingerprint: tlsFP,
+		HPKEPublicKey:     hpkeKey,
+		AuthPublicKey:     authKey,
+		Sealed:            true,
+	}
+
+	doc := BuildAttestationDocumentWithEvidence(binding, []byte("quote"), "chain", PlatformTDX, "cert", hex.EncodeToString(nonce[:]), nil)
+	require.NotNil(t, doc)
+	assert.True(t, doc.Predicate.Sealed)
+
+	hasSealSubject := false
+	for _, subj := range doc.Subject {
+		if subj.Name == "enclave-seal-state" {
+			hasSealSubject = true
+			expected := sha256.Sum256([]byte(SealedUserDataDomain))
+			assert.Equal(t, hex.EncodeToString(expected[:]), subj.Digest["sha256"])
+		}
+	}
+	assert.True(t, hasSealSubject, "sealed document must include enclave-seal-state subject")
+
+	userDataBytes, err := hex.DecodeString(doc.Predicate.UserData)
+	require.NoError(t, err)
+	var userDataArr [64]byte
+	copy(userDataArr[:], userDataBytes)
+	assert.True(t, VerifyCompositeUserDataWithSeal(userDataArr, tlsFP, hpkeKey, nonce, nil, authKey, true))
+	assert.False(t, VerifyCompositeUserDataWithSeal(userDataArr, tlsFP, hpkeKey, nonce, nil, authKey, false))
+}

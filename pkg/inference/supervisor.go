@@ -23,6 +23,90 @@ import (
 	"github.com/cevell/private-ai/pkg/system"
 )
 
+var (
+	allowedQuantizations = map[string]bool{
+		"":                   true,
+		"awq":                true,
+		"awq_marlin":         true,
+		"gptq":               true,
+		"gptq_marlin":        true,
+		"marlin":             true,
+		"fp8":                true,
+		"fbgemm_fp8":         true,
+		"ptpc_fp8":           true,
+		"compressed-tensors": true,
+		"bitsandbytes":       true,
+		"bnb":                true,
+		"gguf":               true,
+		"squeezellm":         true,
+		"aqlm":               true,
+		"deepspeedfp":        true,
+		"tpu_int8":           true,
+		"fp_quant":           true,
+		"experts_int8":       true,
+		"int8":               true,
+		"int4":               true,
+		"mxfp4":              true,
+		"modelopt":           true,
+		"quark":              true,
+		"torchao":            true,
+		"bitblas":            true,
+		"hqq":                true,
+		"eetq":               true,
+		"auto-round":         true,
+		"inc":                true,
+		"ipex":               true,
+		"kv_cache":           true,
+		"none":               true,
+	}
+
+	allowedToolCallParsers = map[string]bool{
+		"":                true,
+		"hermes":          true,
+		"llama3_json":     true,
+		"llama4_json":     true,
+		"llama4_pythonic": true,
+		"mistral":         true,
+		"granite":         true,
+		"granite-20b-fc":  true,
+		"internlm":        true,
+		"jamba":           true,
+		"pythonic":        true,
+		"xlam":            true,
+		"deepseek_v3":     true,
+		"deepseek_v31":    true,
+		"qwen3_coder":     true,
+		"qwen3_xml":       true,
+		"minimax":         true,
+		"hunyuan_a13b":    true,
+		"kimi_k2":         true,
+		"glm45":           true,
+		"glm47":           true,
+		"openai":          true,
+		"step3":           true,
+		"olmo3":           true,
+		"seed_oss":        true,
+		"functiongemma":   true,
+	}
+
+	allowedReasoningParsers = map[string]bool{
+		"":              true,
+		"deepseek_r1":   true,
+		"deepseek_v3":   true,
+		"qwen3":         true,
+		"qwq":           true,
+		"granite":       true,
+		"hunyuan_a13b":  true,
+		"mistral":       true,
+		"step3":         true,
+		"glm45":         true,
+		"openai_gptoss": true,
+		"seed_oss":      true,
+		"minimax":       true,
+		"olmo3":         true,
+	}
+)
+
 // ModelSpec defines the parameters for dynamic model loading.
 type ModelSpec struct {
 	Model           string  `json:"model"`                       // HuggingFace ID, GGUF URL, or local path
@@ -429,6 +513,18 @@ func (s *Supervisor) LoadModel(ctx context.Context, spec ModelSpec) error {
 	if spec.Tokenizer != "" && (strings.HasPrefix(spec.Tokenizer, "-") || strings.ContainsAny(spec.Tokenizer, "\x00\r\n\t;`$|&><")) {
 		return fmt.Errorf("invalid tokenizer parameter: contains forbidden characters or flag prefix")
 	}
+	spec.Quantization = strings.TrimSpace(spec.Quantization)
+	if !allowedQuantizations[strings.ToLower(spec.Quantization)] {
+		return fmt.Errorf("unsupported quantization %q: not in allowlist", spec.Quantization)
+	}
+	spec.ToolCallParser = strings.TrimSpace(spec.ToolCallParser)
+	if !allowedToolCallParsers[strings.ToLower(spec.ToolCallParser)] {
+		return fmt.Errorf("unsupported tool_call_parser %q: not in allowlist", spec.ToolCallParser)
+	}
+	spec.ReasoningParser = strings.TrimSpace(spec.ReasoningParser)
+	if !allowedReasoningParsers[strings.ToLower(spec.ReasoningParser)] {
+		return fmt.Errorf("unsupported reasoning_parser %q: not in allowlist", spec.ReasoningParser)
+	}
 	if spec.ExposeInHealth == nil {
 		return fmt.Errorf("missing required parameter 'expose_in_health': must be explicitly set to true (publicly visible on unauthenticated /v1/health) or false (confidential)")
 	}
@@ -611,21 +707,24 @@ func BuildVLLMArgs(spec ModelSpec, topo hardware.TopologyReport, tensorParallel 
 
 	// Quantization plugin injection (BitsAndBytes, GGUF, or explicit quantization)
 	isBNB := (spec.BitsAndBytes != nil && *spec.BitsAndBytes) ||
-		spec.Quantization == "bitsandbytes" ||
-		spec.Quantization == "bnb"
+		strings.EqualFold(spec.Quantization, "bitsandbytes") ||
+		strings.EqualFold(spec.Quantization, "bnb")
 
 	if isBNB {
 		system.Log("[Plugins] Activating BitsAndBytes quantization plugin (--quantization bitsandbytes --load-format bitsandbytes)")
 		args = append(args, "--quantization", "bitsandbytes", "--load-format", "bitsandbytes")
 	} else if (spec.GGUF != nil && *spec.GGUF) ||
-		spec.Quantization == "gguf" ||
+		strings.EqualFold(spec.Quantization, "gguf") ||
 		strings.HasSuffix(strings.ToLower(spec.Model), ".gguf") ||
 		strings.HasSuffix(strings.ToLower(spec.HFFile), ".gguf") {
 		system.Log("[Plugins] Activating GGUF format plugin (--quantization gguf)")
 		args = append(args, "--quantization", "gguf")
-	} else if spec.Quantization != "" {
-		system.Log("[Quantization] Applying explicit quantization flag: %s", spec.Quantization)
-		args = append(args, "--quantization", spec.Quantization)
+	} else {
+		args = append(args, "--load-format", "safetensors")
+		if spec.Quantization != "" {
+			system.Log("[Quantization] Applying explicit quantization flag: %s", spec.Quantization)
+			args = append(args, "--quantization", spec.Quantization)
+		}
 	}
 
 	// Stability & Numerical Integrity Tuning:
@@ -654,7 +753,12 @@ func BuildVLLMArgs(spec ModelSpec, topo hardware.TopologyReport, tensorParallel 
 	}
 
 	// Execution Mode Dispatch (CUDAGraphs vs Eager)
-	if isHopper || topo.IsTuringGPU || isBNB {
+	// - Hopper (SM90): disable torch.compile Inductor (mode=0) to prevent NaN collapse while keeping FULL_DECODE_ONLY CUDA Graphs for 2-3x decode throughput.
+	// - Turing (SM75) and BitsAndBytes (isBNB): enforce eager mode (no modern CUDAGraph support).
+	// - Blackwell (SM100+) and Ada (L4): native CUDAGraphs and compiled kernels.
+	if isHopper && !isBNB {
+		args = append(args, "--compilation-config", `{"mode": 0, "cudagraph_mode": "FULL_DECODE_ONLY"}`)
+	} else if topo.IsTuringGPU || isBNB {
 		args = append(args, "--enforce-eager")
 	}
 
@@ -778,6 +882,7 @@ func (s *Supervisor) loadGPUModel(ctx context.Context, spec ModelSpec, meta Mode
 		"TORCH_EXTENSIONS_DIR=/mnt/ramdisk/tmp/torch_ext",
 		"SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
 		"VLLM_TARGET_DEVICE=cuda", // STRICT GPU LOCK: enforce CUDA backend inside vLLM
+		"VLLM_LOGGING_LEVEL=WARNING",
 		"VLLM_USE_V2_MODEL_RUNNER=0",
 		"VLLM_USE_FLASHINFER_SAMPLER=0",
 		"CUDA_VISIBLE_DEVICES=" + cudaDevices,
@@ -856,27 +961,18 @@ func ensureVLLMEnvironment() error {
 		return fmt.Errorf("failed to create vLLM venv: %w", err)
 	}
 
-	// Step 2: Install pinned requirements using uv with hash-verified CUDA 12.4 PyTorch backend
+	// Step 2: Install pinned requirements using uv with mandatory hash verification (fail-closed)
 	lockPath := "/etc/cevell/vllm/requirements.lock.txt"
-	reqPath := "/etc/cevell/vllm/requirements.txt"
-	installFile := lockPath
 	if _, err := os.Stat(lockPath); err != nil {
-		// Fallback to unlocked requirements if lockfile is missing (dev builds)
-		system.Log("WARNING: Hash-locked requirements file not found at %s, falling back to %s", lockPath, reqPath)
-		installFile = reqPath
-	}
-	if _, err := os.Stat(installFile); err != nil {
-		return fmt.Errorf("vLLM requirements file not found at %s: cannot provision runtime", installFile)
+		return fmt.Errorf("hash-locked vLLM requirements file not found at %s: refusing unverified install", lockPath)
 	}
 	pipArgs := []string{
 		"pip", "install",
 		"--python", "/mnt/ramdisk/vllm/bin/python3",
 		"--no-cache",
+		"--require-hashes",
+		"-r", lockPath,
 	}
-	if installFile == lockPath {
-		pipArgs = append(pipArgs, "--require-hashes")
-	}
-	pipArgs = append(pipArgs, "-r", installFile)
 
 	system.Log("Installing GPU-locked vLLM packages into /mnt/ramdisk/vllm...")
 	cmdPip := exec.Command(uvPath, pipArgs...)
@@ -1267,6 +1363,11 @@ func (s *Supervisor) runEngineProcess(ctx context.Context, cmd *exec.Cmd, logPre
 		logBufMu.Unlock()
 		return fmt.Errorf("inference process exited prematurely (%v): %s", exitErr, tailOutput)
 	case <-readyChan:
+		s.mu.RLock()
+		modelName := s.currentModel
+		s.mu.RUnlock()
+		warmupInferenceEngine(ctx, s.port, modelName)
+
 		liveCtx, liveCancel := context.WithCancel(context.Background())
 		s.mu.Lock()
 		if s.livenessCancel != nil {
@@ -1274,7 +1375,6 @@ func (s *Supervisor) runEngineProcess(ctx context.Context, cmd *exec.Cmd, logPre
 		}
 		s.livenessCancel = liveCancel
 		s.engineReady = true
-		modelName := s.currentModel
 		s.mu.Unlock()
 		s.RecordActivity()
 		system.Log("Inference engine ready for model %s on port %d!", modelName, s.port)
@@ -1364,6 +1464,54 @@ func findLocalGGUF(modelName string) string {
 		}
 	}
 	return ""
+}
+
+// warmupInferenceEngine sends a 1-token request to trigger JIT kernel compilation
+// during model provisioning so the first user request does not absorb cold-start latency.
+func warmupInferenceEngine(ctx context.Context, port int, fallbackModel string) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	warmCtx, cancel := context.WithTimeout(ctx, 180*time.Second)
+	defer cancel()
+
+	client := &http.Client{Timeout: 180 * time.Second}
+	modelID := fallbackModel
+
+	if req, err := http.NewRequestWithContext(warmCtx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/v1/models", port), nil); err == nil {
+		if resp, err := client.Do(req); err == nil {
+			var modelsResp struct {
+				Data []struct {
+					ID string `json:"id"`
+				} `json:"data"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&modelsResp) == nil && len(modelsResp.Data) > 0 && modelsResp.Data[0].ID != "" {
+				modelID = modelsResp.Data[0].ID
+			}
+			resp.Body.Close()
+		}
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"model":       modelID,
+		"messages":    []map[string]string{{"role": "user", "content": "hi"}},
+		"max_tokens":  1,
+		"temperature": 0,
+	})
+	req, err := http.NewRequestWithContext(warmCtx, http.MethodPost, fmt.Sprintf("http://127.0.0.1:%d/v1/chat/completions", port), bytes.NewReader(payload))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		system.Log("Inference engine warmup request skipped/error (%v)", err)
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	system.Log("Inference engine 1-token warmup completed in %s (HTTP %d)", time.Since(start).Round(time.Millisecond), resp.StatusCode)
 }
 
 // configureSandboxProcAttr configures Linux privilege separation and namespace isolation

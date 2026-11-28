@@ -141,3 +141,29 @@ func TestBindingData_MarshalComposite(t *testing.T) {
 
 	assert.Equal(t, direct, composite, "MarshalComposite must produce identical bytes to ComputeCompositeUserData")
 }
+
+func TestComputeCompositeUserDataWithSeal(t *testing.T) {
+	var tlsFP, hpkePub, nonce, authPub [32]byte
+	copy(tlsFP[:], "node-tls-public-key-fingerprint-")
+	copy(hpkePub[:], "node-hpke-x25519-public-key-here")
+	copy(nonce[:], "client-session-nonce-bytes-here-")
+	copy(authPub[:], "tenant-ed25519-auth-public-key--")
+
+	gpuEv := &GPUEvidence{
+		EvidenceReport:   "spdm-report",
+		CertificateChain: "dice-chain",
+	}
+
+	unsealed := ComputeCompositeUserDataWithSeal(tlsFP, hpkePub, nonce, gpuEv, authPub, false)
+	sealed := ComputeCompositeUserDataWithSeal(tlsFP, hpkePub, nonce, gpuEv, authPub, true)
+
+	// Unsealed matches legacy ComputeCompositeUserData exactly
+	assert.Equal(t, ComputeCompositeUserData(tlsFP, hpkePub, nonce, gpuEv, authPub), unsealed)
+	// Sealed produces distinct composite hash in bytes 32..63
+	assert.Equal(t, unsealed[0:32], sealed[0:32])
+	assert.NotEqual(t, unsealed[32:64], sealed[32:64])
+
+	assert.True(t, VerifyCompositeUserDataWithSeal(sealed, tlsFP, hpkePub, nonce, gpuEv, authPub, true))
+	assert.False(t, VerifyCompositeUserDataWithSeal(sealed, tlsFP, hpkePub, nonce, gpuEv, authPub, false))
+	assert.False(t, VerifyCompositeUserDataWithSeal(unsealed, tlsFP, hpkePub, nonce, gpuEv, authPub, true))
+}

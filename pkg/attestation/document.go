@@ -33,6 +33,7 @@ type ConfidentialComputingPredicate struct {
 	TLSFingerprint      string       `json:"tls_fingerprint"`
 	HPKEPublicKey       string       `json:"hpke_public_key"`
 	AuthorizedPublicKey string       `json:"authorized_public_key,omitempty"`
+	Sealed              bool         `json:"sealed"`
 	UserData            string       `json:"user_data,omitempty"`
 	Nonce               string       `json:"nonce,omitempty"`
 	GPUEvidence         *GPUEvidence `json:"gpu_evidence,omitempty"`
@@ -69,6 +70,7 @@ func BuildAttestationDocumentWithEvidence(binding BindingData, rawQuote []byte, 
 	}
 	doc.Predicate.Certificate = tlsCertPEM // Standard in-toto location inside predicate
 	doc.Predicate.CertificateChain = certChain
+	doc.Predicate.Sealed = binding.Sealed
 	doc.Predicate.Nonce = nonce
 	doc.Predicate.GPUEvidence = gpuEv
 
@@ -82,8 +84,8 @@ func BuildAttestationDocumentWithEvidence(binding BindingData, rawQuote []byte, 
 		}
 	}
 
-	// Compute composite user data binding all anchors: tlsFP, hpkePub, nonce, gpuDigest, authPub
-	composite := ComputeCompositeUserData(binding.TLSKeyFingerprint, binding.HPKEPublicKey, nonceBytes, gpuEv, binding.AuthPublicKey)
+	// Compute composite user data binding all anchors: tlsFP, hpkePub, nonce, gpuDigest, authPub, and seal state
+	composite := binding.MarshalComposite(nonceBytes, gpuEv)
 	doc.Predicate.UserData = hex.EncodeToString(composite[:])
 
 	subjects := make([]InTotoSubject, 0)
@@ -135,6 +137,17 @@ func BuildAttestationDocumentWithEvidence(binding BindingData, rawQuote []byte, 
 			Name: "tenant-authorized-public-key",
 			Digest: map[string]string{
 				"sha256": hex.EncodeToString(authHash[:]),
+			},
+		})
+	}
+
+	// Bind enclave seal state as measured subject when sealed
+	if binding.Sealed {
+		sealHash := sha256.Sum256([]byte(SealedUserDataDomain))
+		subjects = append(subjects, InTotoSubject{
+			Name: "enclave-seal-state",
+			Digest: map[string]string{
+				"sha256": hex.EncodeToString(sealHash[:]),
 			},
 		})
 	}
